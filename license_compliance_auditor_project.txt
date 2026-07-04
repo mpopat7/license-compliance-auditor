@@ -1,0 +1,450 @@
+AI ENGINEERING PORTFOLIO PROJECT
+License Compliance Auditor -- Full Project Plan
+================================================================================
+
+This document compiles the full project development session: the original
+brief, the options considered, and the complete deep dive on the selected
+project (problem explanation, architecture, tech stack, evaluation design,
+build timeline, and resume framing).
+
+
+--------------------------------------------------------------------------------
+1. ORIGINAL BRIEF
+--------------------------------------------------------------------------------
+
+Goal: design an AI engineering portfolio project that would --
+  - Stand out in the 2026 AI engineering job market
+  - Be portfolio-ready for a mid-level SWE (2-6 YOE) pivoting from SWE to
+    AI engineer
+  - Integrate one or more HuggingFace tasks (from the full HF task taxonomy --
+    Multimodal, Computer Vision, NLP, Audio, Tabular, Reinforcement Learning,
+    etc.)
+  - Demonstrate production-grade patterns: RAG, multi-agent orchestration,
+    LLM evaluation, LLMOps -- not just an API wrapper
+  - Be feasible for a solo engineer to ship in 1 month
+  - Use real-world data and APIs for practical scenarios
+
+Required output elements: project name, what it does, real-world problem
+solved, key HF tasks used, recommended tech stack (LangChain / LangGraph /
+LlamaIndex / pgvector / Pinecone / etc.), and resume-ready impact metrics
+and portfolio value.
+
+
+--------------------------------------------------------------------------------
+2. INITIAL CONCEPT EXPLORED (not selected)
+--------------------------------------------------------------------------------
+
+Contract Intelligence Copilot -- a multi-agent RAG system over SEC filings
+(EDGAR data), routing between a table-extraction agent, a narrative-text RAG
+agent, and a numerical-reasoning agent, evaluated against XBRL ground-truth
+figures.
+
+Why it was set aside: SEC/EDGAR-based portfolio projects are a fairly
+saturated niche. A lot of people reach for this domain specifically because
+the data is free and well-documented, which undercuts differentiation value.
+
+
+--------------------------------------------------------------------------------
+3. ALTERNATIVES CONSIDERED
+--------------------------------------------------------------------------------
+
+Four additional directions were evaluated before selecting a final project.
+
+A) Clinical Trial Eligibility Matcher
+   Problem: matching patients to trial eligibility criteria buried in dense
+   free text mixed with structured fields.
+   Data: ClinicalTrials.gov API (free, public, no PHI required -- uses
+   public trial listings only).
+   HF tasks: Document QA, Token Classification, Zero-Shot Classification.
+   Why hard: eligibility logic is often nested boolean logic, not a
+   semantic-similarity problem.
+   Saturation: Low.
+
+B) Regulatory Change Impact Analyzer
+   Problem: detecting which existing company policies become non-compliant
+   when a regulation changes.
+   Data: Federal Register API (free, versioned, daily updates).
+   HF tasks: Zero-Shot Classification, Sentence Similarity, Summarization.
+   Why hard: this is a diffing problem (what changed between regulation
+   versions) propagated through a document graph, not standard retrieval.
+   Saturation: Very low.
+   Note: flagged as the most novel / highest-differentiation option, at the
+   cost of the highest build complexity.
+
+C) Open Source License Compliance Auditor  [SELECTED -- see Section 4]
+   Problem: detecting and reasoning about open-source license obligations
+   and conflicts across a dependency tree.
+   Data: GitHub API, npm / PyPI / crates.io registries, SPDX License List.
+   HF tasks: Document QA, Zero-Shot Classification.
+   Why hard: a three-layer ambiguity problem (detection, classification,
+   propagation) -- detailed in Section 4.
+   Saturation: Low.
+   Personal narrative fit: Highest -- "developer tool built by a developer
+   for developers" is a strong interview story.
+
+D) Customer Support Ticket Root-Cause Triage
+   Problem: routing support tickets AND surfacing recurring root causes
+   before escalation.
+   Data: real public GitHub Issues from a large OSS project (e.g. PyTorch,
+   Kubernetes) used as a stand-in ticket corpus.
+   HF tasks: Text Classification, Zero-Shot Classification, Summarization.
+   Why it's a good JD match: maps closely to a common real internal-tooling
+   use case at companies hiring AI engineers.
+   Saturation: Medium.
+
+Comparison summary:
+
+  Option                           Novelty   Narrative Fit          Eval Rigor  Build Complexity
+  Regulatory Change Analyzer       Highest   Medium                 High        Highest
+  License Compliance Auditor       High      Highest (dev-for-dev)  High        Medium
+  Clinical Trial Matcher           High      Low (no personal tie)  High        Medium
+  Support Ticket Triage            Medium    Medium                 Medium      Lowest
+  SEC Filing Analyzer (original)   Lowest    Low                    High        Medium
+
+Decision: License Compliance Auditor was selected -- best balance of
+novelty, personal narrative strength, and a build scope that's realistically
+shippable solo in one month, while already matching infrastructure already
+in place (GitHub, npm, PyPI, and crates.io are already accessible).
+
+
+--------------------------------------------------------------------------------
+4. SELECTED PROJECT: LICENSE COMPLIANCE AUDITOR
+--------------------------------------------------------------------------------
+
+4.1 -- The problem, explained from zero (no prior industry knowledge assumed)
+
+What a software license actually is:
+Every open-source library or tool comes with a license -- a legal document
+stating what you're allowed to do with the code and what you're required to
+do in return.
+
+Two broad categories:
+  - Permissive licenses (e.g. MIT, Apache-2.0): "no strings attached" -- use
+    it, sell it, ship it, you just need to keep attribution/credit somewhere.
+  - Copyleft licenses (e.g. the GPL family): "strings attached" -- if you
+    build something using this code and distribute that something to others,
+    you may be required to release your own code under the same open license.
+
+Why this becomes an expensive business problem:
+A modern piece of software can depend on hundreds or thousands of open-source
+packages, pulled in automatically by a package manager, often without any
+human reading each individual license. If a GPL-licensed package ends up
+buried several layers deep in a proprietary product's dependency tree -- and
+that product statically links it -- the company can become legally obligated
+to open-source its own product. This is not hypothetical; it has happened to
+real companies, and it's expensive to unwind after the fact (ripping out a
+dependency, finding a replacement, sometimes re-architecting).
+
+Who handles this today, and why the current approach is broken:
+Companies past a certain size run some combination of:
+  - Legal / compliance teams manually reviewing dependency reports
+  - Static scanning tools (e.g. FOSSA, license-checker) that pattern-match
+    license file text against known templates
+
+These tools fail in predictable, common ways:
+  - Slightly modified license text breaks simple text-matching, so the tool
+    reports "unknown" and kicks it to a human
+  - License info isn't in a clean LICENSE file at all -- it's in the README,
+    in a package.json / Cargo.toml field, or only in a NOTICE file
+  - A repo contains two different licenses (a common real pattern: the whole
+    project is MIT except one vendored subdirectory copied from a GPL
+    project -- called "vendoring") and static tools routinely miss it
+  - Two packages look compatible individually but conflict depending on
+    exactly how they're being used (called as a separate program vs.
+    compiled directly into your code -- a distinction that changes the
+    legal obligation)
+
+This is fundamentally a "read messy, inconsistent, real-world text and make
+a judgment call" problem -- a strong fit for an LLM-based system, provided
+it's engineered carefully, since a wrong answer here has real legal
+consequences rather than just being an embarrassing chatbot response.
+
+What SPDX is:
+SPDX is an industry-standard reference system -- a large, agreed-upon list
+of official short codes for every known software license (e.g. MIT,
+GPL-3.0, Apache-2.0), plus a compatibility matrix showing which licenses are
+known to conflict with which others. It's maintained by the Linux
+Foundation, and it's free, public, and machine-readable. It functions as the
+reference dictionary the system checks against.
+
+One-sentence project summary:
+A tool that reads a real code repository, determines what open-source
+licenses it's actually using -- even when that isn't clearly labeled --
+flags cases where licenses conflict or create hidden legal risk, and
+explains its findings with citations back to the exact source text it found
+the answer in.
+
+
+4.2 -- The core technical insight (why this is not just an API wrapper)
+
+The naive version of this project is: fetch a LICENSE file, ask an LLM
+"what license is this," done. That's a single prompt, buildable in a
+weekend, and it demonstrates nothing.
+
+The real problem has three layers of ambiguity that a single LLM call
+cannot resolve on its own:
+
+  1. Detection ambiguity -- not every repo has a clean LICENSE file.
+     License info shows up in README headers, in package manifest fields,
+     in per-file headers, in NOTICE files, and these sources sometimes
+     contradict each other.
+
+  2. Classification ambiguity -- license text varies even for the "same"
+     license. SPDX covers roughly 600 identifiers, but real-world license
+     files contain typos, modifications, dual-licensing clauses, and
+     version-suffix variations ("or later") that change the actual
+     obligations.
+
+  3. Propagation ambiguity -- the real compliance question isn't "what
+     license is this package," it's "does this license, combined with how
+     I'm using it (static linking vs. dynamic linking vs. SaaS-only vs.
+     modify-and-redistribute), create an obligation that conflicts with my
+     own project's license." This requires retrieval against a
+     compatibility matrix, structured extraction of usage pattern, and
+     reasoning that chains obligations across a dependency tree -- not a
+     single embed-and-retrieve step.
+
+That third layer is the multi-agent justification: it's a genuine
+architectural requirement, not decoration.
+
+
+4.3 -- Architecture
+
+                        +----------------------+
+                        |   Repo Input Layer    |
+                        | (GitHub URL or local  |
+                        |   manifest upload)     |
+                        +-----------+----------+
+                                    |
+                        +-----------v----------+
+                        |    Router Agent       |
+                        | (Zero-Shot Classify:   |
+                        |  clean LICENSE file?   |
+                        |  ambiguous/missing?    |
+                        |  conflicting signals?) |
+                        +-----------+----------+
+                    +---------------+---------------+
+                    |               |               |
+          +---------v---+  +--------v--------+  +---v-------------+
+          |  Extraction  |  |  Classification |  |  Conflict        |
+          |  Agent       |  |  Agent          |  |  Detection Agent |
+          |              |  |                 |  |                  |
+          | Document QA   |  | Zero-Shot vs.   |  | Sentence Sim vs. |
+          | over README,  |  | SPDX taxonomy   |  | known conflicting|
+          | package.json,  |  | + embedding      |  | text patterns    |
+          | NOTICE files   |  | match to SPDX    |  | (dual license,   |
+          |               |  | license corpus   |  | vendored subtree)|
+          +---------+----+  +--------+--------+  +---+--------------+
+                    |                 |               |
+                    +-----------------+---------------+
+                                     |
+                        +-----------v-------------+
+                        |   Obligation Reasoning    |
+                        |   Agent                   |
+                        |                            |
+                        | Given: detected license +  |
+                        | usage pattern (declared by  |
+                        | user: "statically linking"  |
+                        | / "SaaS only" etc.)         |
+                        | -> query SPDX compatibility |
+                        |    matrix                   |
+                        | -> chain obligations across |
+                        |    dependency tree          |
+                        +-----------+----------------+
+                                    |
+                        +-----------v-----------------+
+                        |   Synthesis + Citation        |
+                        |   (report with exact license   |
+                        |    file line cited per claim)   |
+                        +--------------------------------+
+
+Why each agent earns its place:
+
+  - Router Agent: extraction strategy differs based on how clean the input
+    is. A repo with a clean top-level LICENSE file needs almost no
+    processing; a repo with license info scattered across manifest fields,
+    headers, and a vague README mention needs the full extraction pipeline.
+    Routing between a cheap path and an expensive path is a legitimate
+    production pattern, not just an extra hop for its own sake.
+
+  - Extraction Agent (Document QA): this is where Document QA does real
+    work, because the "document" here has no consistent schema -- unlike
+    something like a clean financial filing, license info can be scattered
+    across arbitrary repo metadata.
+
+  - Classification Agent (Zero-Shot + embedding): should combine BOTH
+    embedding-similarity search AND zero-shot classification, because
+    zero-shot classification degrades badly with ~600 candidate classes.
+    Two-stage design: embedding similarity narrows to a top-10 shortlist,
+    zero-shot picks among those. This is a good place to demonstrate
+    understanding of a real model limitation and engineering around it.
+
+  - Conflict Detection Agent (Sentence Similarity): catches what static
+    tools miss -- vendored subdirectories with a different license than the
+    declared repo license, or dual-license clauses that simple
+    regex-matching would miss.
+
+  - Obligation Reasoning Agent: this is the part requiring genuine chained
+    reasoning, not retrieval. Design decision: the actual
+    license-compatibility determination should be handled by DETERMINISTIC
+    logic (the SPDX compatibility matrix encoded as structured data / a
+    rules engine), with the LLM used only to explain the result in natural
+    language and to handle the messy extraction layer -- not to make the
+    compliance determination itself, since that needs to be deterministic
+    and auditable.
+
+    This is one of the most senior-sounding details in the whole project:
+    explicitly knowing WHEN NOT to use an LLM for a core piece of logic,
+    rather than defaulting to "LLM does everything."
+
+
+4.4 -- HuggingFace tasks integrated
+
+  - Document Question Answering -- parsing messy, non-standard license /
+    metadata text
+  - Zero-Shot Classification -- routing agent decisions + license-family
+    classification against the SPDX taxonomy
+  - Sentence Similarity / embedding-based matching -- used for the
+    classification shortlist and conflict detection, implemented via
+    sentence-transformers embeddings
+
+
+4.5 -- Recommended tech stack
+
+  Orchestration:     LangGraph
+                      Reason: conditional routing (router -> different agent
+                      paths depending on input cleanliness) fits a
+                      graph-based state machine much better than a linear
+                      chain.
+
+  Vector store:       Qdrant, self-hosted
+                      Reason: the SPDX corpus is small (~600 documents), so
+                      Pinecone-scale infrastructure isn't needed.
+                      Self-hosting also signals infra understanding beyond
+                      calling a managed API, and can run on existing local
+                      hardware.
+
+  Embeddings:         sentence-transformers (e.g. all-MiniLM-L6-v2 or
+                      similar)
+                      Reason: free, fast, can run locally via Ollama or
+                      directly on local hardware -- reinforces the "not just
+                      an API wrapper" narrative.
+
+  LLM:                Local models via Ollama (e.g. qwen3-coder-next,
+                      gpt-oss:120b) for reasoning / synthesis steps, with an
+                      optional cloud model as a comparison baseline in the
+                      eval suite.
+                      Reason: most portfolio projects are 100% cloud-API
+                      calls because the builder has no local inference
+                      option -- having local infra already configured is a
+                      genuine differentiator worth using.
+
+  Data sources:       GitHub API, npm registry, PyPI, crates.io, SPDX
+                      License List (JSON)
+                      Reason: all real, live, publicly accessible, no auth
+                      walls.
+
+  Eval:               Custom eval harness + Ragas for retrieval-quality
+                      metrics
+
+  LLMOps / tracing:   Langfuse (open source, self-hostable)
+                      Reason: fits the "not just calling an API" theme
+                      better than a purely managed / hosted tracing product.
+
+  Frontend:           Minimal -- Gradio or a simple FastAPI + HTMX app.
+                      Deliberately not over-invested in -- this is not the
+                      impressive part of the project.
+
+
+4.6 -- Evaluation design (what makes this a real eval, not a screenshot)
+
+Ground truth sources (all free, real, no synthetic labeling required):
+  - SPDX maintains a machine-readable compatibility matrix and canonical
+    license text corpus
+  - A test set of 200-300 real repos (pulled from GitHub trending/popular
+    lists across languages) with their actual declared licenses as ground
+    truth for Extraction + Classification
+  - A held-out set of KNOWN, documented conflict cases (dual-licensed
+    repos, repos with vendored subdirectories under a different license) as
+    ground truth for the Conflict Detection agent
+
+Metrics (chosen to map to the actual task, not generic RAG boilerplate):
+  - Extraction accuracy: exact-match against SPDX identifier for the
+    correctly identified declared license
+  - Classification precision/recall: both at the specific SPDX-identifier
+    level AND at a coarser "license family" level (permissive /
+    weak-copyleft / strong-copyleft), since the family level is often what
+    actually drives a compliance decision
+  - Conflict detection recall: of the known conflict cases, what fraction
+    does the system flag? Recall matters more than precision here -- a
+    false positive costs a human a few minutes of review; a false negative
+    can cost a real legal problem.
+  - Obligation reasoning correctness: for a set of synthetic "given this
+    license + this usage pattern" scenarios, does the reasoning agent
+    produce the answer that matches the SPDX matrix?
+
+The CI-gate story (arguably the single most valuable LLMOps detail to point
+to): set up a GitHub Action that runs the full eval suite on every commit
+and fails the build if extraction accuracy drops below a set threshold.
+This demonstrates treating eval as an ongoing regression-prevention system
+rather than a one-time number screenshotted for a README -- which is the
+actual substance behind an "LLMOps" claim on a resume.
+
+
+4.7 -- Week-by-week build plan (solo, 1 month)
+
+Week 1 -- Data + Extraction agent
+  - Build the GitHub / npm / PyPI / crates.io ingestion layer (pull LICENSE
+    files, package.json, README, per-file headers from a sample of repos)
+  - Pull and structure the SPDX License List into the Qdrant index
+  - Build and evaluate the Extraction Agent in isolation against the
+    ground-truth set -- get this solid before moving downstream, since
+    everything else depends on it
+
+Week 2 -- Classification + Conflict Detection agents
+  - Two-stage classification: embedding narrow-down -> zero-shot select
+  - Build the curated conflict-pattern corpus (dual-license clauses,
+    vendoring indicators) and wire up the Sentence Similarity matching
+  - Evaluate both agents against ground truth
+
+Week 3 -- Router + Obligation Reasoning + full LangGraph wiring
+  - Encode the SPDX compatibility matrix as structured data (the
+    deterministic-logic piece)
+  - Build the reasoning agent that chains the matrix lookup with declared
+    usage-pattern input
+  - Wire the full graph together in LangGraph and get an end-to-end path
+    working
+  - NOTE: flagged as the highest-risk week for a solo month-long build --
+    integration reliably takes longer than component-building. Consider a
+    scoped-down v1 fallback (fewer license families, smaller conflict
+    corpus) as a guaranteed-shippable safety net if this week runs long.
+
+Week 4 -- Eval hardening + LLMOps + minimal frontend
+  - Full eval suite, CI gate, Langfuse tracing wired in
+  - Thin frontend: repo URL in, report out, citations included
+  - Write up the README with the architecture diagram and eval numbers --
+    this document matters almost as much as the code for portfolio purposes
+
+
+4.8 -- Resume-ready framing
+
+Draft resume line:
+
+  "Built a multi-agent license compliance system that extracts, classifies,
+  and reasons over open-source license obligations across dependency trees;
+  combined deterministic SPDX-matrix reasoning with LLM-assisted extraction
+  to avoid non-auditable compliance determinations; achieved [X]%
+  extraction accuracy and [Y]% conflict-detection recall against a held-out
+  set of real repositories, with CI-gated regression testing on every
+  commit."
+
+Why this line works: it's metric-bearing and technically specific enough to
+survive both an ATS scan and a follow-up interview question, and the "avoid
+non-auditable compliance determinations" clause signals judgment about
+where LLMs are and aren't the right tool for a piece of core logic -- a
+genuinely senior-level distinction, not just a feature list.
+
+
+--------------------------------------------------------------------------------
+END OF DOCUMENT
+--------------------------------------------------------------------------------
