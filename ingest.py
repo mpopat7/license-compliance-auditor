@@ -25,9 +25,28 @@ def is_license_source(name):
             return True
     return False
 
+def get_file(owner, repo, name):
+    url = f"https://raw.githubusercontent.com/{owner}/{repo}/HEAD/{name}"
+    request = urllib.request.Request(url, headers={"User-Agent": "liscense-compliance-auditor"})
+    response = urllib.request.urlopen(request)
+    body = response.read()
+    text = body.decode()
+
+    return text
+
+
+def get_sources(owner, repo):
+    sources = {}
+    file_names = list_root_files(owner, repo)
+    for name in file_names:
+        if is_license_source(name):
+            text = get_file(owner, repo, name)
+            sources[name] = text
+    return sources
 
 if __name__ == "__main__":
-    print(list_root_files("pallets", "flask"))
-    print(is_license_source("LICENSE.txt"))
-    print(is_license_source("README.md"))
-    print(is_license_source("gitignore"))
+    sources = get_sources("pallets", "flask")
+    for name, text in sources.items():
+        print(f"==={name}({len(text)} chars) ===")
+        print(text[:200])
+        print()

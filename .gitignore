@@ -13,3 +13,6 @@ data/repos/
 
 # OS
 .DS_Store
+
+# Project brief
+license_compliance_auditor_project.txt
